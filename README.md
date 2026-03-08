@@ -48,7 +48,7 @@ sudo reboot
 ## Build the Docker image
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/fastflowlm-docker.git
+git clone https://github.com/hpenedones/fastflowlm-docker.git
 cd fastflowlm-docker
 docker build -t fastflowlm .
 ```
