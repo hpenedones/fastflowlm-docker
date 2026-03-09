@@ -147,8 +147,57 @@ As of FLM v0.9.35, these models run on the NPU:
 | Gemma3 1B | ~0.7 GB | `run gemma3:1b` |
 | DeepSeek-R1 8B | ~4.5 GB | `run deepseek-r1:8b` |
 | Phi-4 Mini 4B | ~2.3 GB | `run phi4-mini-it:4b` |
+| Whisper V3 Turbo | ~0.6 GB | `serve --asr 1` (see [Whisper section](#speech-to-text-with-whisper)) |
 
 Run `flm list` for the complete list.
+
+## Speech-to-text with Whisper
+
+FastFlowLM also supports **Whisper V3 Turbo** for NPU-accelerated speech recognition.
+Whisper is not an LLM — it uses the `--asr` flag instead of being run directly.
+
+![Whisper demo — JFK Moon speech transcribed on NPU](whisper-demo.gif)
+
+A [30-second sample](sample_audio.ogg) of JFK's 1962 Rice University "We choose to
+go to the Moon" speech is included in this repo (source:
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Jfk_rice_university_we_choose_to_go_to_the_moon.ogg),
+public domain, trimmed to 30s at the 9-minute mark).
+
+### API server mode
+
+```bash
+# Start the server with Whisper (+ an LLM for multimodal use)
+docker run -d --rm \
+  --device=/dev/accel/accel0 \
+  --ulimit memlock=-1:-1 \
+  -v ~/.config/flm:/root/.config/flm \
+  -p 52625:52625 \
+  fastflowlm serve gemma3:1b --asr 1
+
+# Transcribe an audio file (OpenAI-compatible API)
+curl -s http://localhost:52625/v1/audio/transcriptions \
+  -F "file=@sample_audio.ogg" \
+  -F "model=whisper-v3:turbo" | python3 -m json.tool
+```
+
+Supported audio formats: `.wav`, `.mp3`, `.ogg`, `.m4a`, `.flac` — anything FFmpeg can decode.
+
+On a Ryzen AI 9 HX 370, a 30-second clip transcribes in ~5 seconds; the full
+17-minute speech transcribes in ~2.5 minutes — all on the NPU.
+
+### Interactive CLI mode
+
+```bash
+# Start a chat session with Whisper enabled
+docker run -it --rm \
+  --device=/dev/accel/accel0 \
+  --ulimit memlock=-1:-1 \
+  -v ~/.config/flm:/root/.config/flm \
+  fastflowlm run gemma3:1b --asr 1
+```
+
+Then inside the chat, use `/input "path/to/audio.mp3" summarize it` to transcribe
+and discuss audio files with the LLM.
 
 ## How it works
 
