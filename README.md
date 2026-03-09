@@ -26,11 +26,12 @@ into a minimal container that talks directly to the NPU.
 
 ## Supported hardware
 
-Any AMD processor with an XDNA2 NPU:
-- Ryzen AI 9 HX 370/375 (Strix Point)
-- Ryzen AI 9 HX 395 (Strix Halo)
+Any AMD processor with an XDNA/XDNA2 NPU, including:
+- Ryzen AI 9 HX 370/375 (Strix Point — XDNA2)
+- Ryzen AI 9 HX 395 (Strix Halo — XDNA2)
+- Ryzen AI 7 PRO 360 (NPU4 / AIE2P) — confirmed by community ([#1](https://github.com/hpenedones/fastflowlm-docker/issues/1))
 - Ryzen AI Max / Max+ (Kraken Point)
-- And other XDNA2-based APUs
+- And other XDNA-based APUs
 
 ## Host prerequisites
 
@@ -163,6 +164,29 @@ or run the container with `--group-add render`.
 
 **Low memlock limit**: The NPU needs a high memlock limit. Pass `--ulimit memlock=-1:-1`
 to Docker, or set unlimited memlock in `/etc/security/limits.conf` on the host and reboot.
+
+**XRT version mismatch with kernel 6.17+**: The PPA's XRT (2.20.0) may not work with
+newer kernels. If you see DKMS errors or `amdxdna` fails to load, you may need to
+build XRT 2.23.0+ from source — see the
+[xdna-driver repo](https://github.com/amd/xdna-driver). In that case, mount the
+host-built XRT into the container instead:
+
+```bash
+docker run -it --rm \
+  --device=/dev/accel/accel0 \
+  --ulimit memlock=-1:-1 \
+  -v /opt/xilinx/xrt:/opt/xilinx/xrt:ro \
+  -v /usr/lib/firmware/amdnpu:/usr/lib/firmware/amdnpu:ro \
+  -e XRT_ALLOW_0_VER=1 \
+  -v ~/.config/flm:/root/.config/flm \
+  fastflowlm run llama3.2:1b
+```
+
+**NPU4 / AIE2P firmware (e.g. Ryzen AI 7 PRO 360)**: Kernel 6.17 may require
+protocol-specific firmware under `/usr/lib/firmware/amdnpu/17f0_10/`. If `flm validate`
+fails, check that the firmware files are present and symlinked correctly — see
+[issue #1](https://github.com/hpenedones/fastflowlm-docker/issues/1) for a detailed
+walkthrough.
 
 ## Credits
 
