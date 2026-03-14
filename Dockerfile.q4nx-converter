@@ -1,0 +1,49 @@
+# =============================================================================
+# FastFlowLM Q4NX converter helper image
+# =============================================================================
+# Builds the public GGUF -> Q4NX conversion tool published by FastFlowLM.
+#
+# This image is intentionally separate from the main runtime image so the
+# default `docker build -t fastflowlm .` path stays small and unchanged.
+#
+# Example:
+#   docker build -f Dockerfile.q4nx-converter -t fastflowlm-q4nx .
+#   docker run --rm -v "$PWD:/work" fastflowlm-q4nx \
+#     -i /work/Qwen3-8B-Q4_1.gguf \
+#     -o /work/qwen3-8b-local
+# =============================================================================
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ARG FLM_Q4NX_CONVERTER_REPO=https://github.com/FastFlowLM/FLM_Q4NX_Converter.git
+ARG FLM_Q4NX_CONVERTER_COMMIT=36475568e778b31e6a70c4debe6cb709fb203c8d
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    git \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+RUN git clone "${FLM_Q4NX_CONVERTER_REPO}" FLM_Q4NX_Converter \
+    && cd FLM_Q4NX_Converter \
+    && git checkout "${FLM_Q4NX_CONVERTER_COMMIT}" \
+    && chmod +x setup_venv.sh activate.sh \
+    && ./setup_venv.sh
+
+ENV CONVERTER_HOME=/opt/FLM_Q4NX_Converter
+ENV HF_HOME=${CONVERTER_HOME}/hf_cache
+ENV PATH="${CONVERTER_HOME}/venv/bin:${PATH}"
+
+COPY scripts/register_flm_local_model.py /usr/local/bin/register-flm-local-model
+RUN chmod +x /usr/local/bin/register-flm-local-model \
+    && mkdir -p /work
+
+WORKDIR /work
+
+ENTRYPOINT ["python", "/opt/FLM_Q4NX_Converter/convert.py"]
+CMD ["--help"]

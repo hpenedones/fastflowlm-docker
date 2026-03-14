@@ -105,6 +105,8 @@ RUN apt install -y ./Release/xrt_plugin*.deb
 FROM ubuntu:24.04 AS flm-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG FASTFLOWLM_REPO=https://github.com/FastFlowLM/FastFlowLM.git
+ARG FASTFLOWLM_COMMIT=5b33fd97afc4d07a5673fff0efdec4e15fe61a1e
 
 # FastFlowLM build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -135,9 +137,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Copy XRT installation from xrt-builder
 COPY --from=xrt-builder /opt/xilinx/xrt /opt/xilinx/xrt
 
-# Clone FastFlowLM
+# Clone FastFlowLM at a pinned commit so model/runtime support stays reproducible.
 WORKDIR /build
-RUN git clone --recurse-submodules https://github.com/FastFlowLM/FastFlowLM.git
+RUN git clone --recurse-submodules "${FASTFLOWLM_REPO}" FastFlowLM \
+    && cd FastFlowLM \
+    && git checkout "${FASTFLOWLM_COMMIT}" \
+    && git submodule update --init --recursive
 
 # Build (point at XRT from source build)
 WORKDIR /build/FastFlowLM/src

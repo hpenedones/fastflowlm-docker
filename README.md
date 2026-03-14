@@ -71,6 +71,15 @@ cd fastflowlm-docker
 docker build -t fastflowlm .
 ```
 
+The main image now pins FastFlowLM to commit
+`5b33fd97afc4d07a5673fff0efdec4e15fe61a1e` for reproducibility.
+If you also want the public GGUF -> Q4NX conversion tool for local experiments,
+build the optional helper image:
+
+```bash
+docker build -f Dockerfile.q4nx-converter -t fastflowlm-q4nx .
+```
+
 The build takes ~15-25 minutes (XRT source build + Rust compilation + FLM C++ build).
 The resulting image is ~440MB (3-stage build, runtime-only).
 
@@ -134,7 +143,11 @@ spot for interactive use, delivering 60-89 tokens/s decode speed.
 
 ## Available models
 
-As of FLM v0.9.35, these models run on the NPU:
+The Dockerfile now pins FastFlowLM to commit
+`5b33fd97afc4d07a5673fff0efdec4e15fe61a1e` for reproducible builds.
+The exact upstream list can change over time, so `docker run --rm fastflowlm list`
+is authoritative. As of that pinned commit, these **selected** model tags are
+known to be available:
 
 | Model | Size | Command |
 |---|---|---|
@@ -144,12 +157,134 @@ As of FLM v0.9.35, these models run on the NPU:
 | Qwen3 0.6B | ~0.4 GB | `run qwen3:0.6b` |
 | Qwen3 1.7B | ~1.0 GB | `run qwen3:1.7b` |
 | Qwen3 4B | ~2.3 GB | `run qwen3:4b` |
+| Qwen3 8B | ~5.6 GB | `run qwen3:8b` |
+| Qwen3 4B Thinking 2507 | ~3.1 GB | `run qwen3-tk:4b` |
+| Qwen3 4B Instruct 2507 | ~3.1 GB | `run qwen3-it:4b` |
+| Qwen3-VL 4B Instruct | ~3.9 GB | `run qwen3vl-it:4b` |
 | Gemma3 1B | ~0.7 GB | `run gemma3:1b` |
 | DeepSeek-R1 8B | ~4.5 GB | `run deepseek-r1:8b` |
 | Phi-4 Mini 4B | ~2.3 GB | `run phi4-mini-it:4b` |
 | Whisper V3 Turbo | ~0.6 GB | `serve --asr 1` (see [Whisper section](#speech-to-text-with-whisper)) |
 
 Run `flm list` for the complete list.
+
+`Qwen3.5-35B-A3B` is **not** currently in the upstream FastFlowLM model list.
+
+## Qwen3.5-35B-A3B status
+
+Today, FastFlowLM still cannot run `Qwen3.5-35B-A3B` on Ryzen AI just by
+quantizing or converting the weights.
+
+Why this is still blocked:
+
+- The pinned upstream `model_list.json` does **not** contain `Qwen3.5-35B-A3B`.
+- The public [`FLM_Q4NX_Converter`](https://github.com/FastFlowLM/FLM_Q4NX_Converter)
+  currently targets architectures such as `Qwen2`, `Qwen2.5`, `Qwen3`,
+  `Qwen3-VL`, `Llama`, `Gemma3`, `Phi4`, `GPT-OSS`, and `LFM2` — not
+  `Qwen3.5-35B-A3B`.
+- FastFlowLM contributors have stated that models not already in `flm list`
+  are not supported yet because new model sizes need different `xclbin` and code
+  setup, especially at decode time.
+- Even if a low-bit conversion existed, `Qwen3.5-35B-A3B` still carries the full
+  35B-parameter weight set in memory/storage: expect roughly **~21 GB at INT4**
+  and **~36-40 GB at INT8** before KV-cache and runtime overhead.
+
+What this repo can do today:
+
+- pin FastFlowLM to a known-good upstream commit
+- build the public GGUF -> Q4NX converter in a separate helper image
+- generate local `model_list.json` overlays for **already supported**
+  FastFlowLM families/sizes so you can test local `.q4nx` artifacts cleanly
+
+What this repo cannot do today:
+
+- make FastFlowLM run a brand-new `35B-A3B` tag just by editing JSON or reducing
+  precision
+
+## Experimental local Q4NX workflow
+
+This repo now includes an **optional** conversion path for local experiments with
+families and sizes that FastFlowLM already knows how to execute.
+
+### 1. Build the converter image
+
+```bash
+docker build -f Dockerfile.q4nx-converter -t fastflowlm-q4nx .
+```
+
+### 2. Convert a compatible GGUF model to Q4NX
+
+This step is useful for models that stay within an already supported FastFlowLM
+family/size (for example, a custom or fine-tuned `qwen3:8b` variant).
+
+```bash
+docker run --rm -v "$PWD:/work" fastflowlm-q4nx \
+  -i /work/Qwen3-8B-Q4_1.gguf \
+  -o /work/qwen3-8b-local
+```
+
+The converter writes `model.q4nx` into the output folder. For VLMs, it may also
+produce `vision_weight.q4nx`.
+
+### 3. Extract the pinned FastFlowLM model list
+
+```bash
+./scripts/extract_flm_model_list.sh fastflowlm ~/.config/flm/model_list.base.json
+```
+
+### 4. Create a local model-list overlay entry
+
+```bash
+python3 scripts/register_flm_local_model.py \
+  --base ~/.config/flm/model_list.base.json \
+  --output ~/.config/flm/model_list.local.json \
+  --template-tag qwen3:8b \
+  --new-tag qwen3-local:8b \
+  --name Qwen3-8B-Local-NPU2 \
+  --family qwen3 \
+  --parameter-size 8B \
+  --size-bytes 8000000000 \
+  --default-context-length 16384 \
+  --mkdir
+```
+
+This prints the expected local model directory. For the example above, it will be
+something like:
+
+```text
+~/.config/flm/models/Qwen3-8B-Local-NPU2
+```
+
+Copy the required files there. At minimum that usually means:
+
+- `config.json`
+- `model.q4nx`
+- `tokenizer.json`
+- `tokenizer_config.json`
+
+Use the file list printed by the helper script for the exact template you chose.
+
+### 5. Run FastFlowLM with the local overlay
+
+```bash
+docker run -it --rm \
+  --device=/dev/accel/accel0 \
+  --ulimit memlock=-1:-1 \
+  -e FLM_CONFIG_PATH=/root/.config/flm/model_list.local.json \
+  -v ~/.config/flm:/root/.config/flm \
+  fastflowlm run qwen3-local:8b
+```
+
+Notes:
+
+- Local overlay entries are **manual-copy only** by default. The helper script
+  intentionally disables `flm pull` for those entries unless you provide real
+  remote URLs.
+- This workflow is for models that stay within FastFlowLM's existing runtime
+  envelope. It is useful for swapping weights or testing same-family/same-size
+  local conversions.
+- It does **not** unlock `Qwen3.5-35B-A3B` yet. We still need upstream runtime,
+  `xclbin`, and registry support for that model size/family.
 
 ## Speech-to-text with Whisper
 
@@ -201,13 +336,18 @@ and discuss audio files with the LLM.
 
 ## How it works
 
-The Dockerfile uses a 3-stage build:
+The main Dockerfile uses a 3-stage build:
 1. **XRT builder**: Builds XRT base and NPU plugin from the
-   [xdna-driver](https://github.com/amd/xdna-driver) source (no PPA dependency)
+    [xdna-driver](https://github.com/amd/xdna-driver) source (no PPA dependency)
 2. **FLM builder**: Installs build dependencies (cmake, ninja, Rust, Boost,
-   FFmpeg, FFTW3), clones FastFlowLM, and compiles against the source-built XRT
+   FFmpeg, FFTW3), clones a **pinned FastFlowLM commit**, and compiles against
+   the source-built XRT
 3. **Runtime stage**: Copies only the built binary, NPU kernel libraries (`.so`),
    and xclbin files into a minimal Ubuntu image with runtime dependencies
+
+There is also an optional `Dockerfile.q4nx-converter` that builds FastFlowLM's
+public GGUF -> Q4NX converter for local experiments with already supported
+model families/sizes.
 
 The container accesses the NPU via `--device=/dev/accel/accel0`. The host
 kernel's `amdxdna` driver handles the actual hardware communication.
