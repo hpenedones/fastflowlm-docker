@@ -307,6 +307,24 @@ The runtime helper audits a local `FastFlowLM` checkout and reports:
 These helpers do **not** make `Qwen3.5-35B-A3B` runnable by themselves. They
 only turn the next integration steps into something concrete and repeatable.
 
+### Generate an upstream-ready blocker summary
+
+Once you have JSON outputs from the HF inspection and runtime audit, you can
+generate a concise upstream-ready summary:
+
+```bash
+python3 scripts/inspect_hf_model.py --repo Qwen/Qwen3.5-35B-A3B --json > hf-report.json
+python3 scripts/check_qwen35_runtime.py /path/to/FastFlowLM --json > runtime-report.json
+python3 scripts/generate_qwen35_upstream_report.py \
+  --hf-report hf-report.json \
+  --runtime-report runtime-report.json \
+  --markdown
+```
+
+If you also have a community GGUF inspection report, pass it with
+`--community-gguf-report` so the summary includes the known intermediate
+artifact path.
+
 ## Experimental local Q4NX workflow
 
 This repo now includes an **optional** conversion path for local experiments with
