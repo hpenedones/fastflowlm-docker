@@ -201,6 +201,84 @@ What this repo cannot do today:
 - make FastFlowLM run a brand-new `35B-A3B` tag just by editing JSON or reducing
   precision
 
+### Inspect a target Hugging Face repo quickly
+
+This repo now includes a small inspection helper for the first bring-up steps:
+
+```bash
+python3 scripts/inspect_hf_model.py --repo Qwen/Qwen3.5-35B-A3B
+```
+
+It reports:
+
+- the published `model_type`
+- whether the model uses MoE
+- whether it mixes linear and full attention
+- whether a `vision_config` is present
+- whether the target Hugging Face repo exposes any `.gguf` files
+
+The default check against `Qwen/Qwen3.5-35B-A3B` is useful because it makes one
+thing explicit: the **official** repo does not currently expose a `.gguf`
+artifact, so any GGUF path starts from either a separate export step or a
+community GGUF repo. Even with that artifact path, FastFlowLM still needs new
+public converter/runtime support for `qwen3_5_moe`.
+
+The helper tolerates GGUF-only repos too. If a community repo does not expose a
+`config.json`, it will still inspect the file tree and report any `.gguf`
+artifacts it finds.
+
+You can point it at a community GGUF repo like this:
+
+```bash
+python3 scripts/inspect_hf_model.py \
+  --repo lmstudio-community/Qwen3.5-35B-A3B-GGUF
+```
+
+### Practical bring-up path for `Qwen3.5-35B-A3B`
+
+If the goal is "get this model running locally on the NPU eventually", the
+practical sequence is:
+
+1. Prove the architecture gap explicitly:
+
+   ```bash
+   python3 scripts/inspect_hf_model.py --repo Qwen/Qwen3.5-35B-A3B
+   ```
+
+   Expect a `qwen3_5_moe`-style result with MoE, hybrid attention, and a
+   multimodal config. That is the reason the current public FastFlowLM path is
+   insufficient.
+
+2. Prove an artifact path exists:
+
+   ```bash
+   python3 scripts/inspect_hf_model.py \
+     --repo lmstudio-community/Qwen3.5-35B-A3B-GGUF
+   ```
+
+   If `.gguf` files are present there, you have a candidate intermediate
+   artifact for a future Q4NX conversion spike. At the time of writing, the
+   `lmstudio-community/Qwen3.5-35B-A3B-GGUF` tree exposes quantized files such
+   as `Q4_K_M`, `Q6_K`, `Q8_0`, plus an `mmproj` GGUF.
+
+3. Attempt a **new** converter path, not a `qwen3` tweak:
+
+   - add a dedicated `qwen3.5` / `qwen3_5_moe` mapper to the public
+     `FLM_Q4NX_Converter`
+   - validate tensor naming, MoE routing tensors, and any metadata required to
+     preserve the hybrid attention schedule
+
+4. Treat runtime support as a separate blocker:
+
+   - even if the converter succeeds, FastFlowLM still needs public runtime
+     support for `qwen3_5_moe`
+   - that likely means new `AutoModel` glue, new graph/runtime handling for
+     DeltaNet-style layers plus MoE, and possibly new `xclbin` support for
+     Ryzen AI
+
+This is why "download the model and reduce precision" is only part of the path,
+not the whole solution.
+
 ## Experimental local Q4NX workflow
 
 This repo now includes an **optional** conversion path for local experiments with
