@@ -279,6 +279,34 @@ practical sequence is:
 This is why "download the model and reduce precision" is only part of the path,
 not the whole solution.
 
+### Bootstrap local converter and runtime spikes
+
+If you have local checkouts of the upstream converter and runtime repos, this
+repo now includes two helpers for the next phase:
+
+```bash
+python3 scripts/scaffold_qwen35_converter.py /path/to/FLM_Q4NX_Converter
+python3 scripts/check_qwen35_runtime.py /path/to/FastFlowLM
+```
+
+The converter helper patches a local `FLM_Q4NX_Converter` checkout with a
+**scaffold** `qwen3_5_moe` family:
+
+- adds a new architecture enum/mapping in `q4nx/constants.py`
+- adds `q4nx/models/qwen3_5_moe.py`
+- adds `configs/qwen3_5_moe.json`
+- reuses the public `GPTOSS` MoE packing path as the nearest baseline
+
+The runtime helper audits a local `FastFlowLM` checkout and reports:
+
+- whether `qwen3` and `gpt-oss` reusable pieces are present
+- whether a `qwen3.5` family is wired into `all_models.hpp` and `model_list.json`
+- whether an expected xclbin directory such as `Qwen3.5-35B-A3B-NPU2` exists
+- whether runtime source files show any public signs of hybrid-attention or MoE support
+
+These helpers do **not** make `Qwen3.5-35B-A3B` runnable by themselves. They
+only turn the next integration steps into something concrete and repeatable.
+
 ## Experimental local Q4NX workflow
 
 This repo now includes an **optional** conversion path for local experiments with
