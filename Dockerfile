@@ -1,10 +1,10 @@
 # =============================================================================
 # FastFlowLM on AMD Ryzen AI NPU — Ubuntu 24.04
 # =============================================================================
-# Runs LLMs on the AMD XDNA/XDNA2 NPU (Strix Point, Kraken Point, etc.) on Linux.
+# Runs LLMs on the AMD XDNA/XDNA2 NPU (Strix Point, Krackan Point, Kraken Point, etc.) on Linux.
 #
 # Prerequisites (on the HOST, not in the container):
-#   - AMD Ryzen AI processor with NPU (Strix Point / Kraken Point / etc.)
+#   - AMD Ryzen AI processor with NPU (Strix Point / Krackan Point / Kraken Point / etc.)
 #   - Linux kernel 6.11+ with amdxdna driver (in-tree from 6.14+, or via amdxdna-dkms)
 #   - NPU device visible at /dev/accel/accel0
 #   - NPU firmware in /lib/firmware/amdnpu/ (or /usr/lib/firmware/amdnpu/)
