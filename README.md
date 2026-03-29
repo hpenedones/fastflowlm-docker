@@ -30,6 +30,7 @@ Any AMD processor with an XDNA/XDNA2 NPU, including:
 - Ryzen AI 9 HX 370/375 (Strix Point — XDNA2)
 - Ryzen AI 9 HX 395 (Strix Halo — XDNA2)
 - Ryzen AI 7 PRO 360 (NPU4 / AIE2P) — confirmed by community ([#1](https://github.com/hpenedones/fastflowlm-docker/issues/1))
+- Ryzen AI 5 PRO 340 (Krackan Point — XDNA2 / AIE2) — requires host driver built from latest [xdna-driver](https://github.com/amd/xdna-driver) source ([#3](https://github.com/hpenedones/fastflowlm-docker/issues/3))
 - Ryzen AI Max / Max+ (Kraken Point)
 - And other XDNA-based APUs
 
@@ -229,6 +230,29 @@ newer kernels (6.17+). If `amdxdna` fails to load, build the
 [xdna-driver](https://github.com/amd/xdna-driver) from source on the host.
 Note: the Docker image already builds XRT from source internally, so this only
 affects the host-side kernel driver.
+
+**Incompatible firmware protocol (e.g. Ryzen AI 5 PRO 340)**: If `dmesg` shows
+`aie2_check_protocol: Incompatible firmware protocol major 7 minor 2` (or similar)
+and `flm validate` reports `amdxdna version 0.0 is incompatible`, the host's `amdxdna`
+driver is too old for the NPU firmware shipped with your kernel. The PPA's pre-built
+driver does not support newer firmware protocol versions. To fix this, build the
+[xdna-driver](https://github.com/amd/xdna-driver) from source on the host:
+
+```bash
+git clone --recurse-submodules https://github.com/amd/xdna-driver.git
+cd xdna-driver
+# Build and install the kernel module
+sudo ./tools/amdxdna_mgmt.sh unload   # unload old module if loaded
+cd build
+./build.sh -release -xdna
+sudo dpkg -i Release/xrt_plugin*.deb
+sudo modprobe amdxdna
+```
+
+This builds the latest kernel module with support for current firmware protocol
+versions. After installing, `flm validate` should detect the driver correctly.
+See [issue #3](https://github.com/hpenedones/fastflowlm-docker/issues/3) for a
+detailed walkthrough.
 
 **NPU4 / AIE2P firmware (e.g. Ryzen AI 7 PRO 360)**: Kernel 6.17 may require
 protocol-specific firmware under `/usr/lib/firmware/amdnpu/17f0_10/`. If `flm validate`
